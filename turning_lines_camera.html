@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Turning Lines Camera</title>
+  <style>
+    html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
+    .notice {
+      position: fixed; left: 12px; bottom: 12px; right: 12px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12px; line-height: 1.35; color:#bbb; opacity:.8;
+      pointer-events: none; text-align:center;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+</head>
+<body>
+  <div class="notice">If the camera doesn’t appear, make sure you opened this over HTTPS (or localhost) and allowed camera access.</div>
+<script>
+let cam;
+let gridSize = 15;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  // Request rear camera on supported devices
+  cam = createCapture({ video: { facingMode: { exact: "environment" } }, audio: false }, camReady);
+  cam.size(width, height);
+  cam.hide();
+  stroke(255);
+  strokeWeight(2);
+  pixelDensity(1); // keep performance reasonable on mobile
+}
+
+function camReady() {
+  if (cam && cam.elt) {
+    cam.elt.setAttribute('playsinline', '');
+    cam.elt.setAttribute('autoplay', '');
+    cam.elt.muted = true;
+  }
+}
+
+function draw() {
+  background(0);
+
+  if (!cam.loadedmetadata) return;
+  cam.loadPixels();
+
+  // Scale sampling to camera buffer size to avoid index mismatch
+  const sx = cam.width / width;
+  const sy = cam.height / height;
+
+  for (let y = 0; y < height; y += gridSize) {
+    for (let x = 0; x < width; x += gridSize) {
+      const cx = Math.floor(x * sx);
+      const cy = Math.floor(y * sy);
+      const i = 4 * (cx + cy * cam.width);
+      if (i < cam.pixels.length && i >= 0) {
+        const r = cam.pixels[i];
+        const g = cam.pixels[i + 1];
+        const b = cam.pixels[i + 2];
+        const brightnessVal = (r + g + b) / 3;
+        const angle = map(brightnessVal, 0, 255, -PI, PI);
+        const len = gridSize * 1.6;
+
+        const x1 = x + Math.cos(angle) * (len / 2);
+        const y1 = y + Math.sin(angle) * (len / 2);
+        const x2 = x - Math.cos(angle) * (len / 2);
+        const y2 = y - Math.sin(angle) * (len / 2);
+
+        line(x1, y1, x2, y2);
+      }
+    }
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  if (cam) cam.size(width, height);
+}
+</script>
+</body>
+</html>
