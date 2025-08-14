@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Rotating Plus Camera</title>
+  <title>Flow Field Camera</title>
   <style>
     html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
+    canvas { display:block; }
     .notice {
       position: fixed; left: 12px; bottom: 12px; right: 12px;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-family: system-ui, sans-serif;
       font-size: 12px; line-height: 1.35; color:#bbb; opacity:.8;
       pointer-events: none; text-align:center;
     }
@@ -19,17 +20,29 @@
   <div class="notice">If the camera doesn’t appear, make sure you opened this over HTTPS (or localhost) and allowed camera access.</div>
 <script>
 let cam;
-let gridSize = 10; // less dense
+let cols, rows;
+let scl = 20;
+let inc = 0.1;
+let zoff = 0;
+let flowfield;
+let particles = [];
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
+  colorMode(HSB, 360, 100, 100);
   cam = createCapture({ video: { facingMode: { exact: "environment" } }, audio: false }, camReady);
   cam.size(width, height);
   cam.hide();
-  stroke(255);
-  strokeWeight(1.2);
-  noFill();
-  pixelDensity(1);
+
+  cols = floor(width / scl);
+  rows = floor(height / scl);
+  flowfield = new Array(cols * rows);
+
+  for (let i = 0; i < 3000; i++) {
+    particles[i] = new Particle();
+  }
+
+  background(0);
 }
 
 function camReady() {
@@ -41,41 +54,86 @@ function camReady() {
 }
 
 function draw() {
-  background(0);
-  if (!cam.loadedmetadata) return;
   cam.loadPixels();
-
-  const sx = cam.width / width;
-  const sy = cam.height / height;
-  const len = gridSize * 1.6; // bigger plus signs
-
-  for (let y = 0; y < height; y += gridSize) {
-    for (let x = 0; x < width; x += gridSize) {
-      const cx = Math.floor(x * sx);
-      const cy = Math.floor(y * sy);
-      const i = 4 * (cx + cy * cam.width);
-      if (i >= 0 && i < cam.pixels.length) {
-        const r = cam.pixels[i];
-        const g = cam.pixels[i + 1];
-        const b = cam.pixels[i + 2];
-        const brightnessVal = (r + g + b) / 3;
-
-        const angle = map(brightnessVal, 0, 255, -PI, PI);
-
-        push();
-        translate(x, y);
-        rotate(angle);
-        line(-len/2, 0, len/2, 0);
-        line(0, -len/2, 0, len/2);
-        pop();
-      }
+  let yoff = 0;
+  for (let y = 0; y < rows; y++) {
+    let xoff = 0;
+    for (let x = 0; x < cols; x++) {
+      let index = x + y * cols;
+      let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+      flowfield[index] = angle;
+      xoff += inc;
     }
+    yoff += inc;
+  }
+  zoff += 0.003;
+
+  for (let p of particles) {
+    p.follow(flowfield);
+    p.update();
+    p.show();
+    p.edges();
   }
 }
 
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-  if (cam) cam.size(width, height);
+class Particle {
+  constructor() {
+    this.pos = createVector(random(width), random(height));
+    this.vel = createVector(0, 0);
+    this.acc = createVector(0, 0);
+    this.maxspeed = 2;
+    this.prevPos = this.pos.copy();
+  }
+
+  follow(vectors) {
+    let x = floor(this.pos.x / scl);
+    let y = floor(this.pos.y / scl);
+    let index = x + y * cols;
+    let angle = vectors[index];
+    let force = p5.Vector.fromAngle(angle);
+    this.applyForce(force);
+  }
+
+  applyForce(force) {
+    this.acc.add(force);
+  }
+
+  update() {
+    this.vel.add(this.acc);
+    this.vel.limit(this.maxspeed);
+    this.pos.add(this.vel);
+    this.acc.mult(0);
+  }
+
+  show() {
+    // Sample camera color at particle position
+    let cx = floor(map(this.pos.x, 0, width, 0, cam.width));
+    let cy = floor(map(this.pos.y, 0, height, 0, cam.height));
+    let i = (cy * cam.width + cx) * 4;
+    if (i >= 0 && i < cam.pixels.length) {
+      let r = cam.pixels[i];
+      let g = cam.pixels[i + 1];
+      let b = cam.pixels[i + 2];
+
+      // Convert RGB to HSB and boost saturation by 50%
+      let c = color(r, g, b);
+      let h = hue(c);
+      let s = min(saturation(c) * 1.5, 100); // boost saturation
+      let br = brightness(c);
+
+      stroke(h, s, br, 50); // alpha for trails
+      strokeWeight(1);
+      line(this.pos.x, this.pos.y, this.prevPos.x, this.prevPos.y);
+      this.prevPos = this.pos.copy();
+    }
+  }
+
+  edges() {
+    if (this.pos.x > width) { this.pos.x = 0; this.prevPos = this.pos.copy(); }
+    if (this.pos.x < 0) { this.pos.x = width; this.prevPos = this.pos.copy(); }
+    if (this.pos.y > height) { this.pos.y = 0; this.prevPos = this.pos.copy(); }
+    if (this.pos.y < 0) { this.pos.y = height; this.prevPos = this.pos.copy(); }
+  }
 }
 </script>
 </body>
