@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Turning Plus Camera</title>
+  <title>Rotating Plus Camera</title>
   <style>
     html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
     .notice {
@@ -19,7 +19,7 @@
   <div class="notice">If the camera doesn’t appear, make sure you opened this over HTTPS (or localhost) and allowed camera access.</div>
 <script>
 let cam;
-let gridSize = 6; // spacing between symbols
+let gridSize = 10; // less dense
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -28,6 +28,7 @@ function setup() {
   cam.hide();
   stroke(255);
   strokeWeight(1.2);
+  noFill();
   pixelDensity(1);
 }
 
@@ -46,7 +47,7 @@ function draw() {
 
   const sx = cam.width / width;
   const sy = cam.height / height;
-  const len = gridSize * 0.8; // shorter line length
+  const len = gridSize * 0.8; // shorter lines
 
   for (let y = 0; y < height; y += gridSize) {
     for (let x = 0; x < width; x += gridSize) {
@@ -59,13 +60,19 @@ function draw() {
         const b = cam.pixels[i + 2];
         const brightnessVal = (r + g + b) / 3;
 
-        // Optionally, map brightness to stroke color
-        stroke(brightnessVal);
+        // Map brightness to rotation
+        const angle = map(brightnessVal, 0, 255, -PI, PI);
+
+        push();
+        translate(x, y);
+        rotate(angle);
 
         // Horizontal line
-        line(x - len/2, y, x + len/2, y);
+        line(-len/2, 0, len/2, 0);
         // Vertical line
-        line(x, y - len/2, x, y + len/2);
+        line(0, -len/2, 0, len/2);
+
+        pop();
       }
     }
   }
