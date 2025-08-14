@@ -19,17 +19,16 @@
   <div class="notice">If the camera doesn’t appear, make sure you opened this over HTTPS (or localhost) and allowed camera access.</div>
 <script>
 let cam;
-let gridSize = 15;
+let gridSize = 6; // smaller = denser lines
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  // Request rear camera on supported devices
   cam = createCapture({ video: { facingMode: { exact: "environment" } }, audio: false }, camReady);
   cam.size(width, height);
   cam.hide();
   stroke(255);
-  strokeWeight(2);
-  pixelDensity(1); // keep performance reasonable on mobile
+  strokeWeight(1.2); // slightly thinner lines for density
+  pixelDensity(1); // helps performance on mobile
 }
 
 function camReady() {
@@ -42,11 +41,9 @@ function camReady() {
 
 function draw() {
   background(0);
-
   if (!cam.loadedmetadata) return;
   cam.loadPixels();
 
-  // Scale sampling to camera buffer size to avoid index mismatch
   const sx = cam.width / width;
   const sy = cam.height / height;
 
@@ -55,7 +52,7 @@ function draw() {
       const cx = Math.floor(x * sx);
       const cy = Math.floor(y * sy);
       const i = 4 * (cx + cy * cam.width);
-      if (i < cam.pixels.length && i >= 0) {
+      if (i >= 0 && i < cam.pixels.length) {
         const r = cam.pixels[i];
         const g = cam.pixels[i + 1];
         const b = cam.pixels[i + 2];
