@@ -2,46 +2,55 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Flow Field Painter - Longer Strokes</title>
+<title>Flow Field Painter - iPhone Style</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  body {
+  html, body {
     margin: 0;
-    overflow: hidden;
+    padding: 0;
     background: black;
+    overflow: hidden;
   }
-  #buttons {
+  #ui {
     position: absolute;
-    top: 10px;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  #captureBtn {
+    position: absolute;
+    bottom: 30px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 10;
-    display: flex;
-    gap: 10px;
-  }
-  .circle-button {
-    width: 60px;
-    height: 60px;
+    width: 80px;
+    height: 80px;
     border-radius: 50%;
-    border: 4px solid white;
+    border: 6px solid white;
     background: rgba(255, 255, 255, 0.1);
+    pointer-events: auto;
     cursor: pointer;
   }
-  .clear-button {
-    width: 60px;
-    height: 60px;
+  #clearBtn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
-    border: 4px solid red;
-    background: rgba(255, 0, 0, 0.1);
+    border: 3px solid white;
+    background: rgba(255,255,255,0.2);
+    pointer-events: auto;
     cursor: pointer;
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
 </head>
 <body>
-<div id="buttons">
-  <button id="captureBtn" class="circle-button"></button>
-  <button id="clearBtn" class="clear-button"></button>
+<div id="ui">
+  <button id="clearBtn"></button>
+  <button id="captureBtn"></button>
 </div>
 <script>
 let video;
@@ -58,10 +67,10 @@ function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(1);
 
-  // Rear camera on iPhone
-  video = createCapture({ 
-    video: { facingMode: { exact: "environment" } }, 
-    audio: false 
+  // Rear camera
+  video = createCapture({
+    video: { facingMode: { exact: "environment" } },
+    audio: false
   });
   video.size(width, height);
   video.hide();
@@ -70,7 +79,7 @@ function setup() {
   rows = floor(height / scl);
   flowfield = new Array(cols * rows);
 
-  for (let i = 0; i < 1500; i++) { // more particles for faster build-up
+  for (let i = 0; i < 1500; i++) {
     particles[i] = new Particle();
   }
 
@@ -78,17 +87,19 @@ function setup() {
     captureImage = video.get();
     captureImage.loadPixels();
     imgReady = true;
-  });
-
-  document.getElementById('clearBtn').addEventListener('click', () => {
     background(0);
   });
 
-  background(0);
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    if (imgReady) background(0);
+  });
 }
 
 function draw() {
-  if (!imgReady) return;
+  if (!imgReady) {
+    image(video, 0, 0, width, height);
+    return;
+  }
 
   let yoff = 0;
   for (let y = 0; y < rows; y++) {
@@ -159,10 +170,11 @@ class Particle {
 
       push();
       translate(this.pos.x, this.pos.y);
-      rotate(this.vel.heading() + random(-0.3, 0.3));
+      // Jittered rotation
+      rotate(this.vel.heading() + random(-0.5, 0.5));
       rectMode(CENTER);
-      let len = random(8, 14); // LONGER dashes
-      let wid = random(3, 5);  // THICKER strokes
+      let len = random(8, 14); // dash length
+      let wid = random(3, 5);  // stroke thickness
       rect(0, 0, len, wid);
       pop();
     }
