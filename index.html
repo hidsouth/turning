@@ -1,185 +1,151 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Flow Field Painter - iPhone Style</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: black;
-    overflow: hidden;
-  }
-  #ui {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-  #captureBtn {
-    position: absolute;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: 6px solid white;
-    background: rgba(255, 255, 255, 0.1);
-    pointer-events: auto;
-    cursor: pointer;
-  }
-  #clearBtn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 3px solid white;
-    background: rgba(255,255,255,0.2);
-    pointer-events: auto;
-    cursor: pointer;
-  }
-</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+  <meta charset="UTF-8" />
+  <title>Flow Field Painter - Short Dashes</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      background: black;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #captureBtn {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 70px;
+      height: 70px;
+      background: white;
+      border-radius: 50%;
+      border: 4px solid rgba(255,255,255,0.6);
+      cursor: pointer;
+      z-index: 10;
+    }
+    #clearBtn {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      width: 40px;
+      height: 40px;
+      background: rgba(255,255,255,0.5);
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      z-index: 10;
+    }
+  </style>
 </head>
 <body>
-<div id="ui">
-  <button id="clearBtn"></button>
   <button id="captureBtn"></button>
-</div>
-<script>
-let video;
-let captureImage;
-let particles = [];
-let flowfield;
-let cols, rows;
-let scl = 20;
-let inc = 0.1;
-let zoff = 0;
-let imgReady = false;
+  <button id="clearBtn"></button>
 
-function setup() {
-  createCanvas(windowWidth, windowHeight);
-  pixelDensity(1);
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <script>
+    let video;
+    let img;
+    let captured = false;
+    let flowfield = [];
+    let cols, rows;
+    let scl = 20;
+    let zoff = 0;
+    let particles = [];
 
-  // Rear camera
-  video = createCapture({
-    video: { facingMode: { exact: "environment" } },
-    audio: false
-  });
-  video.size(width, height);
-  video.hide();
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      pixelDensity(1);
+      video = createCapture(VIDEO);
+      video.size(width, height);
+      video.hide();
 
-  cols = floor(width / scl);
-  rows = floor(height / scl);
-  flowfield = new Array(cols * rows);
+      cols = floor(width / scl);
+      rows = floor(height / scl);
 
-  for (let i = 0; i < 1500; i++) {
-    particles[i] = new Particle();
-  }
+      for (let i = 0; i < 1500; i++) { // many particles for faster build-up
+        particles.push(new Particle());
+      }
 
-  document.getElementById('captureBtn').addEventListener('click', () => {
-    captureImage = video.get();
-    captureImage.loadPixels();
-    imgReady = true;
-    background(0);
-  });
+      document.getElementById("captureBtn").onclick = () => {
+        img = video.get();
+        captured = true;
+      };
 
-  document.getElementById('clearBtn').addEventListener('click', () => {
-    if (imgReady) background(0);
-  });
-}
-
-function draw() {
-  if (!imgReady) {
-    image(video, 0, 0, width, height);
-    return;
-  }
-
-  let yoff = 0;
-  for (let y = 0; y < rows; y++) {
-    let xoff = 0;
-    for (let x = 0; x < cols; x++) {
-      let index = x + y * cols;
-      let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
-      let v = p5.Vector.fromAngle(angle);
-      v.setMag(0.5);
-      flowfield[index] = v;
-      xoff += inc;
+      document.getElementById("clearBtn").onclick = () => {
+        clear();
+        if (captured) image(img, 0, 0, width, height); // optional base image
+      };
     }
-    yoff += inc;
-  }
-  zoff += 0.003;
 
-  for (let p of particles) {
-    p.follow(flowfield);
-    p.update();
-    p.show(captureImage);
-  }
-}
+    function draw() {
+      if (!captured) {
+        // Show live camera preview
+        image(video, 0, 0, width, height);
+      } else {
+        // Generate flow field
+        let yoff = 0;
+        for (let y = 0; y < rows; y++) {
+          let xoff = 0;
+          for (let x = 0; x < cols; x++) {
+            let angle = noise(xoff, yoff, zoff) * TWO_PI * 2;
+            flowfield[x + y * cols] = p5.Vector.fromAngle(angle);
+            xoff += 0.1;
+          }
+          yoff += 0.1;
+        }
+        zoff += 0.003;
 
-class Particle {
-  constructor() {
-    this.pos = createVector(random(width), random(height));
-    this.vel = createVector(0, 0);
-    this.acc = createVector(0, 0);
-    this.maxspeed = 2;
-  }
+        img.loadPixels();
 
-  follow(vectors) {
-    let x = floor(this.pos.x / scl);
-    let y = floor(this.pos.y / scl);
-    let index = x + y * cols;
-    let force = vectors[index];
-    this.applyForce(force);
-  }
-
-  applyForce(force) {
-    this.acc.add(force);
-  }
-
-  update() {
-    this.vel.add(this.acc);
-    this.vel.limit(this.maxspeed);
-    this.pos.add(this.vel);
-    this.acc.mult(0);
-
-    if (this.pos.x > width) this.pos.x = 0;
-    if (this.pos.x < 0) this.pos.x = width;
-    if (this.pos.y > height) this.pos.y = 0;
-    if (this.pos.y < 0) this.pos.y = height;
-  }
-
-  show(sourceImg) {
-    let cx = floor(map(this.pos.x, 0, width, 0, sourceImg.width));
-    let cy = floor(map(this.pos.y, 0, height, 0, sourceImg.height));
-    let i = (cy * sourceImg.width + cx) * 4;
-
-    if (i >= 0 && i < sourceImg.pixels.length) {
-      let r = sourceImg.pixels[i];
-      let g = sourceImg.pixels[i + 1];
-      let b = sourceImg.pixels[i + 2];
-
-      noStroke();
-      fill(r, g, b, 220);
-
-      push();
-      translate(this.pos.x, this.pos.y);
-      // Jittered rotation
-      rotate(this.vel.heading() + random(-0.5, 0.5));
-      rectMode(CENTER);
-      let len = random(8, 14); // dash length
-      let wid = random(3, 5);  // stroke thickness
-      rect(0, 0, len, wid);
-      pop();
+        for (let p of particles) {
+          p.update();
+          p.show();
+          p.reset(); // reset after each dash
+        }
+      }
     }
-  }
-}
-</script>
+
+    class Particle {
+      constructor() {
+        this.reset();
+      }
+
+      reset() {
+        this.pos = createVector(random(width), random(height));
+      }
+
+      update() {
+        let x = floor(this.pos.x / scl);
+        let y = floor(this.pos.y / scl);
+        let index = x + y * cols;
+        let force = flowfield[index];
+        if (force) {
+          this.angle = force.heading();
+        } else {
+          this.angle = random(TWO_PI);
+        }
+      }
+
+      show() {
+        let px = floor(this.pos.x);
+        let py = floor(this.pos.y);
+        if (px >= 0 && px < width && py >= 0 && py < height) {
+          let idx = (py * img.width + px) * 4;
+          let r = img.pixels[idx];
+          let g = img.pixels[idx + 1];
+          let b = img.pixels[idx + 2];
+
+          push();
+          translate(this.pos.x, this.pos.y);
+          rotate(this.angle + random(-PI/8, PI/8)); // jitter
+          stroke(r, g, b);
+          strokeWeight(4); // thicker
+          line(0, 0, random(6, 15), 0); // short dash
+          pop();
+        }
+      }
+    }
+  </script>
 </body>
 </html>
