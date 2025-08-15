@@ -1,58 +1,68 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Flow Field Painter</title>
+  <meta charset="utf-8" />
+  <title>Flow Field Painter - iPhone Ready</title>
   <style>
-    html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
-    canvas { display:block; }
-    .controls {
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: black;
+    }
+    canvas {
+      display: block;
+    }
+    #controls {
       position: fixed;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
+      bottom: 20px;
+      width: 100%;
       display: flex;
+      justify-content: center;
       gap: 20px;
       z-index: 10;
     }
-    .btn {
-      width: 70px;
-      height: 70px;
+    .circle-btn {
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
-      border: 4px solid white;
-      background: rgba(255,255,255,0.1);
+      background: white;
+      border: 4px solid #ccc;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
       cursor: pointer;
     }
-    .btn.small {
-      width: 50px;
-      height: 50px;
-      border: 3px solid white;
+    .clear-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: red;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      cursor: pointer;
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
 <body>
-  <div class="controls">
-    <div id="captureBtn" class="btn"></div>
-    <div id="clearBtn" class="btn small"></div>
+  <div id="controls">
+    <div id="captureBtn" class="circle-btn"></div>
+    <div id="clearBtn" class="clear-btn"></div>
   </div>
+
 <script>
 let cam;
 let cols, rows;
-let scl = 10; // grid size
-let flowfield;
-let particles = [];
-let img;
-let running = false;
+let scl = 20;
+let inc = 0.05;
 let zoff = 0;
-let inc = 0.1; // noise increment
-let mag = 0.5; // smaller magnitude for calmer flow
-let maxLineLen = 4; // short strokes
+let particles = [];
+let flowfield;
+let imgSnapshot;
+let photoMode = false;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  cam = createCapture({ video: { facingMode: { exact: "environment" } }, audio: false }, camReady);
+  cam = createCapture({ video: { facingMode: { exact: "environment" } }, audio: false });
   cam.size(width, height);
   cam.hide();
 
@@ -60,7 +70,8 @@ function setup() {
   rows = floor(height / scl);
   flowfield = new Array(cols * rows);
 
-  for (let i = 0; i < 2000; i++) {
+  // fewer particles for less density
+  for (let i = 0; i < 1500; i++) {
     particles[i] = new Particle();
   }
 
@@ -68,62 +79,58 @@ function setup() {
 
   document.getElementById('captureBtn').addEventListener('click', capturePhoto);
   document.getElementById('clearBtn').addEventListener('click', () => {
-    if (running) background(0);
+    background(0);
+    photoMode = false;
   });
 }
 
-function camReady() {
-  if (cam && cam.elt) {
-    cam.elt.setAttribute('playsinline', '');
-    cam.elt.setAttribute('autoplay', '');
-    cam.elt.muted = true;
-  }
-}
-
-function capturePhoto() {
-  img = cam.get();
-  running = true;
-  background(0);
-}
-
 function draw() {
-  if (!running) {
-    image(cam, 0, 0, width, height);
-    return;
-  }
-
-  img.loadPixels();
   let yoff = 0;
   for (let y = 0; y < rows; y++) {
     let xoff = 0;
     for (let x = 0; x < cols; x++) {
-      let index = x + y * cols;
-      let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+      let angle = noise(xoff, yoff, zoff) * TWO_PI * 1.5; // calm turbulence
       let v = p5.Vector.fromAngle(angle);
-      v.setMag(mag);
-      flowfield[index] = v;
+      v.setMag(1);
+      flowfield[x + y * cols] = v;
       xoff += inc;
     }
     yoff += inc;
   }
-  zoff += 0.002;
+  zoff += 0.001;
+
+  if (!photoMode) {
+    cam.loadPixels();
+  } else if (imgSnapshot) {
+    imgSnapshot.loadPixels();
+  }
 
   for (let p of particles) {
     p.follow(flowfield);
     p.update();
-    p.show(img);
+    if (!photoMode) {
+      p.show(cam);
+    } else {
+      p.show(imgSnapshot);
+    }
     p.edges();
   }
 }
 
+function capturePhoto() {
+  imgSnapshot = cam.get();
+  photoMode = true;
+}
+
+// PARTICLE CLASS
 class Particle {
   constructor() {
     this.pos = createVector(random(width), random(height));
+    this.prevPos = this.pos.copy();
     this.vel = createVector(0, 0);
     this.acc = createVector(0, 0);
-    this.maxspeed = 1.5;
+    this.maxspeed = 2;
   }
-
   follow(vectors) {
     let x = floor(this.pos.x / scl);
     let y = floor(this.pos.y / scl);
@@ -131,38 +138,44 @@ class Particle {
     let force = vectors[index];
     this.applyForce(force);
   }
-
   applyForce(force) {
     this.acc.add(force);
   }
-
   update() {
     this.vel.add(this.acc);
     this.vel.limit(this.maxspeed);
     this.pos.add(this.vel);
     this.acc.mult(0);
   }
-
   show(sourceImg) {
-    let cx = floor(map(this.pos.x, 0, width, 0, sourceImg.width));
-    let cy = floor(map(this.pos.y, 0, height, 0, sourceImg.height));
+    let cx = floor(map(this.prevPos.x, 0, width, 0, sourceImg.width));
+    let cy = floor(map(this.prevPos.y, 0, height, 0, sourceImg.height));
     let i = (cy * sourceImg.width + cx) * 4;
     if (i >= 0 && i < sourceImg.pixels.length) {
       let r = sourceImg.pixels[i];
       let g = sourceImg.pixels[i + 1];
       let b = sourceImg.pixels[i + 2];
-      stroke(r, g, b, 180);
-      strokeWeight(2.0);
-      let dir = this.vel.copy().setMag(maxLineLen);
-      line(this.pos.x, this.pos.y, this.pos.x + dir.x, this.pos.y + dir.y);
+      noStroke();
+      fill(r, g, b, 200);
+      
+      // short dash-like strokes
+      push();
+      translate(this.prevPos.x, this.prevPos.y);
+      rotate(this.vel.heading() + random(-0.2, 0.2));
+      rectMode(CENTER);
+      let len = 6; // short length
+      let wid = 3; // thickness
+      rect(0, 0, len, wid);
+      pop();
     }
+    this.prevPos = this.pos.copy();
   }
-
   edges() {
-    if (this.pos.x > width) { this.pos.x = 0; }
-    if (this.pos.x < 0) { this.pos.x = width; }
-    if (this.pos.y > height) { this.pos.y = 0; }
-    if (this.pos.y < 0) { this.pos.y = height; }
+    if (this.pos.x > width) this.pos.x = 0;
+    if (this.pos.x < 0) this.pos.x = width;
+    if (this.pos.y > height) this.pos.y = 0;
+    if (this.pos.y < 0) this.pos.y = height;
+    this.prevPos = this.pos.copy();
   }
 }
 </script>
