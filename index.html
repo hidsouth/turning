@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Flow Field from Photo</title>
+  <title>Abstract Flow Field</title>
   <style>
     html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
     canvas { display:block; }
@@ -35,7 +35,7 @@ let cols, rows;
 let scl = 20;
 let flowfield;
 let particles = [];
-let img; // frozen image after capture
+let img;
 let running = false;
 
 function setup() {
@@ -48,7 +48,8 @@ function setup() {
   rows = floor(height / scl);
   flowfield = new Array(cols * rows);
 
-  for (let i = 0; i < 3000; i++) {
+  // fewer particles for less density
+  for (let i = 0; i < 800; i++) {
     particles[i] = new Particle();
   }
 
@@ -66,14 +67,13 @@ function camReady() {
 }
 
 function capturePhoto() {
-  img = cam.get(); // capture current frame
-  running = true; // start flow field
+  img = cam.get();
+  running = true;
   background(0);
 }
 
 function draw() {
   if (!running) {
-    // show live camera feed before capture
     image(cam, 0, 0, width, height);
     return;
   }
@@ -104,9 +104,8 @@ class Particle {
     this.pos = createVector(random(width), random(height));
     this.vel = createVector(0, 0);
     this.acc = createVector(0, 0);
-    this.maxspeed = 1.2; // slower movement for shorter lines
+    this.maxspeed = 1.2; // slow for short lines
     this.prevPos = this.pos.copy();
-    this.color = color(255); // will be set at start of each draw
   }
 
   follow(vectors) {
@@ -130,7 +129,6 @@ class Particle {
   }
 
   show(sourceImg) {
-    // sample color ONLY at starting point
     let cx = floor(map(this.prevPos.x, 0, width, 0, sourceImg.width));
     let cy = floor(map(this.prevPos.y, 0, height, 0, sourceImg.height));
     let i = (cy * sourceImg.width + cx) * 4;
@@ -138,8 +136,8 @@ class Particle {
       let r = sourceImg.pixels[i];
       let g = sourceImg.pixels[i + 1];
       let b = sourceImg.pixels[i + 2];
-      stroke(r, g, b, 80);
-      strokeWeight(1);
+      stroke(r, g, b, 120); // more opacity for painterly look
+      strokeWeight(2.5);    // thicker lines
       line(this.prevPos.x, this.prevPos.y, this.pos.x, this.pos.y);
       this.prevPos = this.pos.copy();
     }
