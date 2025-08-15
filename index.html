@@ -2,148 +2,164 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Flow Field Painter - Short Dashes</title>
+  <title>iPhone Painter</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <style>
-    body, html {
+    html, body {
       margin: 0;
       padding: 0;
-      background: black;
       overflow: hidden;
-      touch-action: none;
+      background: black;
     }
-    #captureBtn {
+    canvas {
+      display: block;
+    }
+    #capture-btn {
       position: absolute;
       bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
       width: 70px;
       height: 70px;
-      background: white;
+      border: 4px solid white;
       border-radius: 50%;
-      border: 4px solid rgba(255,255,255,0.6);
+      background: rgba(255, 255, 255, 0.9);
       cursor: pointer;
-      z-index: 10;
     }
-    #clearBtn {
+    #clear-btn {
       position: absolute;
-      top: 15px;
-      right: 15px;
+      top: 20px;
+      right: 20px;
       width: 40px;
       height: 40px;
-      background: rgba(255,255,255,0.5);
+      background: rgba(255, 255, 255, 0.5);
       border-radius: 50%;
-      border: none;
       cursor: pointer;
-      z-index: 10;
     }
   </style>
 </head>
 <body>
-  <button id="captureBtn"></button>
-  <button id="clearBtn"></button>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <button id="capture-btn"></button>
+  <button id="clear-btn"></button>
   <script>
     let video;
-    let img;
-    let captured = false;
-    let flowfield = [];
+    let capturedImage;
+    let particles = [];
     let cols, rows;
     let scl = 20;
     let zoff = 0;
-    let particles = [];
+    let flowfield = [];
+    let painting = false;
 
     function setup() {
       createCanvas(windowWidth, windowHeight);
-      pixelDensity(1);
-      video = createCapture(VIDEO);
+      
+      // Request rear camera
+      let constraints = {
+        video: { facingMode: { ideal: "environment" } },
+        audio: false
+      };
+      video = createCapture(constraints);
       video.size(width, height);
       video.hide();
-
+      
       cols = floor(width / scl);
       rows = floor(height / scl);
+      flowfield = new Array(cols * rows);
 
-      for (let i = 0; i < 1500; i++) { // many particles for faster build-up
-        particles.push(new Particle());
+      for (let i = 0; i < 800; i++) {
+        particles[i] = new Particle();
       }
 
-      document.getElementById("captureBtn").onclick = () => {
-        img = video.get();
-        captured = true;
-      };
-
-      document.getElementById("clearBtn").onclick = () => {
+      document.getElementById('capture-btn').addEventListener('click', () => {
+        capturedImage = video.get();
+        painting = true;
         clear();
-        if (captured) image(img, 0, 0, width, height); // optional base image
-      };
+        background(0);
+      });
+
+      document.getElementById('clear-btn').addEventListener('click', () => {
+        if (painting) {
+          background(0);
+        }
+      });
     }
 
     function draw() {
-      if (!captured) {
-        // Show live camera preview
+      if (!painting) {
         image(video, 0, 0, width, height);
-      } else {
-        // Generate flow field
-        let yoff = 0;
-        for (let y = 0; y < rows; y++) {
-          let xoff = 0;
-          for (let x = 0; x < cols; x++) {
-            let angle = noise(xoff, yoff, zoff) * TWO_PI * 2;
-            flowfield[x + y * cols] = p5.Vector.fromAngle(angle);
-            xoff += 0.1;
-          }
-          yoff += 0.1;
-        }
-        zoff += 0.003;
+        return;
+      }
 
-        img.loadPixels();
-
-        for (let p of particles) {
-          p.update();
-          p.show();
-          p.reset(); // reset after each dash
+      let yoff = 0;
+      for (let y = 0; y < rows; y++) {
+        let xoff = 0;
+        for (let x = 0; x < cols; x++) {
+          let index = x + y * cols;
+          let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+          let v = p5.Vector.fromAngle(angle);
+          v.setMag(0.1);
+          flowfield[index] = v;
+          xoff += 0.1;
         }
+        yoff += 0.1;
+      }
+      zoff += 0.003;
+
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].follow(flowfield);
+        particles[i].update();
+        particles[i].show();
+        particles[i].reset(); // short strokes, always reset
       }
     }
 
     class Particle {
       constructor() {
-        this.reset();
+        this.pos = createVector(random(width), random(height));
+        this.vel = createVector(0, 0);
+        this.acc = createVector(0, 0);
+        this.maxspeed = 2;
+      }
+
+      follow(vectors) {
+        let x = floor(this.pos.x / scl);
+        let y = floor(this.pos.y / scl);
+        let index = x + y * cols;
+        let force = vectors[index];
+        this.applyForce(force);
+      }
+
+      applyForce(force) {
+        this.acc.add(force);
+      }
+
+      update() {
+        this.vel.add(this.acc);
+        this.vel.limit(this.maxspeed);
+        this.pos.add(this.vel);
+        this.acc.mult(0);
+      }
+
+      show() {
+        if (capturedImage) {
+          let px = constrain(floor(this.pos.x), 0, capturedImage.width - 1);
+          let py = constrain(floor(this.pos.y), 0, capturedImage.height - 1);
+          let c = capturedImage.get(px, py);
+          stroke(c);
+          strokeWeight(3);
+          let angle = noise(this.pos.x * 0.01, this.pos.y * 0.01) * TWO_PI;
+          let len = random(8, 14); // short strokes
+          let x2 = this.pos.x + cos(angle) * len;
+          let y2 = this.pos.y + sin(angle) * len;
+          line(this.pos.x, this.pos.y, x2, y2);
+        }
       }
 
       reset() {
         this.pos = createVector(random(width), random(height));
-      }
-
-      update() {
-        let x = floor(this.pos.x / scl);
-        let y = floor(this.pos.y / scl);
-        let index = x + y * cols;
-        let force = flowfield[index];
-        if (force) {
-          this.angle = force.heading();
-        } else {
-          this.angle = random(TWO_PI);
-        }
-      }
-
-      show() {
-        let px = floor(this.pos.x);
-        let py = floor(this.pos.y);
-        if (px >= 0 && px < width && py >= 0 && py < height) {
-          let idx = (py * img.width + px) * 4;
-          let r = img.pixels[idx];
-          let g = img.pixels[idx + 1];
-          let b = img.pixels[idx + 2];
-
-          push();
-          translate(this.pos.x, this.pos.y);
-          rotate(this.angle + random(-PI/8, PI/8)); // jitter
-          stroke(r, g, b);
-          strokeWeight(4); // thicker
-          line(0, 0, random(6, 15), 0); // short dash
-          pop();
-        }
+        this.vel.mult(0);
+        this.acc.mult(0);
       }
     }
   </script>
