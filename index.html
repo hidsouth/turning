@@ -54,7 +54,7 @@
     function setup() {
       createCanvas(windowWidth, windowHeight);
       
-      // Request rear camera
+      // Rear camera
       let constraints = {
         video: { facingMode: { ideal: "environment" } },
         audio: false
@@ -67,7 +67,8 @@
       rows = floor(height / scl);
       flowfield = new Array(cols * rows);
 
-      for (let i = 0; i < 800; i++) {
+      // ↓ Reduced particle count for sparser build-up
+      for (let i = 0; i < 400; i++) {
         particles[i] = new Particle();
       }
 
@@ -110,7 +111,7 @@
         particles[i].follow(flowfield);
         particles[i].update();
         particles[i].show();
-        particles[i].reset(); // short strokes, always reset
+        particles[i].reset(); // short independent strokes
       }
     }
 
@@ -147,9 +148,9 @@
           let py = constrain(floor(this.pos.y), 0, capturedImage.height - 1);
           let c = capturedImage.get(px, py);
           stroke(c);
-          strokeWeight(3);
+          strokeWeight(5); // ↑ Thicker strokes
           let angle = noise(this.pos.x * 0.01, this.pos.y * 0.01) * TWO_PI;
-          let len = random(8, 14); // short strokes
+          let len = random(16, 24); // ↑ Longer strokes proportional to strokeWeight
           let x2 = this.pos.x + cos(angle) * len;
           let y2 = this.pos.y + sin(angle) * len;
           line(this.pos.x, this.pos.y, x2, y2);
