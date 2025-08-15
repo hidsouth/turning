@@ -1,63 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flow Field Painter - Stipple Brush</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; background: black; }
-    #controls {
-      position: fixed;
-      bottom: 20px;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      gap: 20px;
-      z-index: 10;
-    }
-    .button {
-      background: white;
-      border-radius: 50%;
-      width: 70px;
-      height: 70px;
-      border: 4px solid #ccc;
-      cursor: pointer;
-    }
-    .button:active { background: #ddd; }
-    .clear-btn {
-      background: rgba(255, 255, 255, 0.8);
-      border-radius: 10px;
-      padding: 10px 20px;
-      border: none;
-      font-size: 16px;
-      cursor: pointer;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Flow Field Painter - Longer Strokes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+  }
+  #buttons {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    gap: 10px;
+  }
+  .circle-button {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 4px solid white;
+    background: rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+  }
+  .clear-button {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 4px solid red;
+    background: rgba(255, 0, 0, 0.1);
+    cursor: pointer;
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
 </head>
 <body>
-
-<div id="controls">
-  <button class="clear-btn" onclick="clearCanvas()">Clear</button>
-  <div class="button" onclick="capturePhoto()"></div>
+<div id="buttons">
+  <button id="captureBtn" class="circle-button"></button>
+  <button id="clearBtn" class="clear-button"></button>
 </div>
-
 <script>
 let video;
-let sourceImg;
+let captureImage;
 let particles = [];
 let flowfield;
 let cols, rows;
 let scl = 20;
 let inc = 0.1;
 let zoff = 0;
-let photoTaken = false;
+let imgReady = false;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(1);
 
-  video = createCapture({ video: { facingMode: "environment" } });
+  // Rear camera on iPhone
+  video = createCapture({ 
+    video: { facingMode: { exact: "environment" } }, 
+    audio: false 
+  });
   video.size(width, height);
   video.hide();
 
@@ -65,47 +70,46 @@ function setup() {
   rows = floor(height / scl);
   flowfield = new Array(cols * rows);
 
-  // Increase particles for faster buildup
-  for (let i = 0; i < 2000; i++) {
+  for (let i = 0; i < 1500; i++) { // more particles for faster build-up
     particles[i] = new Particle();
   }
+
+  document.getElementById('captureBtn').addEventListener('click', () => {
+    captureImage = video.get();
+    captureImage.loadPixels();
+    imgReady = true;
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    background(0);
+  });
 
   background(0);
 }
 
 function draw() {
-  if (photoTaken && sourceImg) {
-    let yoff = 0;
-    for (let y = 0; y < rows; y++) {
-      let xoff = 0;
-      for (let x = 0; x < cols; x++) {
-        let index = x + y * cols;
-        let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
-        let v = p5.Vector.fromAngle(angle);
-        v.setMag(1);
-        flowfield[index] = v;
-        xoff += inc;
-      }
-      yoff += inc;
-    }
-    zoff += 0.002;
+  if (!imgReady) return;
 
-    sourceImg.loadPixels();
-    for (let i = 0; i < particles.length; i++) {
-      particles[i].follow(flowfield);
-      particles[i].update();
-      particles[i].show(sourceImg);
+  let yoff = 0;
+  for (let y = 0; y < rows; y++) {
+    let xoff = 0;
+    for (let x = 0; x < cols; x++) {
+      let index = x + y * cols;
+      let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+      let v = p5.Vector.fromAngle(angle);
+      v.setMag(0.5);
+      flowfield[index] = v;
+      xoff += inc;
     }
+    yoff += inc;
   }
-}
+  zoff += 0.003;
 
-function capturePhoto() {
-  sourceImg = video.get();
-  photoTaken = true;
-}
-
-function clearCanvas() {
-  background(0);
+  for (let p of particles) {
+    p.follow(flowfield);
+    p.update();
+    p.show(captureImage);
+  }
 }
 
 class Particle {
@@ -141,26 +145,24 @@ class Particle {
   }
 
   show(sourceImg) {
-    let px = this.pos.x + random(-2, 2);
-    let py = this.pos.y + random(-2, 2);
-
-    let cx = floor(map(px, 0, width, 0, sourceImg.width));
-    let cy = floor(map(py, 0, height, 0, sourceImg.height));
+    let cx = floor(map(this.pos.x, 0, width, 0, sourceImg.width));
+    let cy = floor(map(this.pos.y, 0, height, 0, sourceImg.height));
     let i = (cy * sourceImg.width + cx) * 4;
 
     if (i >= 0 && i < sourceImg.pixels.length) {
       let r = sourceImg.pixels[i];
       let g = sourceImg.pixels[i + 1];
       let b = sourceImg.pixels[i + 2];
+
       noStroke();
-      fill(r, g, b, 230);
+      fill(r, g, b, 220);
 
       push();
-      translate(px, py);
-      rotate(this.vel.heading() + random(-0.4, 0.4));
+      translate(this.pos.x, this.pos.y);
+      rotate(this.vel.heading() + random(-0.3, 0.3));
       rectMode(CENTER);
-      let len = random(2, 4); // short strokes
-      let wid = random(1.5, 3.5); // thicker strokes
+      let len = random(8, 14); // LONGER dashes
+      let wid = random(3, 5);  // THICKER strokes
       rect(0, 0, len, wid);
       pop();
     }
