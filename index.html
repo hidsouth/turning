@@ -1,18 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Flow Field Painter - iPhone Ready</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Field Painter - Stipple Brush</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: black;
-    }
-    canvas {
-      display: block;
-    }
+    body { margin: 0; overflow: hidden; background: black; }
     #controls {
       position: fixed;
       bottom: 20px;
@@ -22,115 +16,106 @@
       gap: 20px;
       z-index: 10;
     }
-    .circle-btn {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
+    .button {
       background: white;
+      border-radius: 50%;
+      width: 70px;
+      height: 70px;
       border: 4px solid #ccc;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
       cursor: pointer;
     }
+    .button:active { background: #ddd; }
     .clear-btn {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: red;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 10px;
+      padding: 10px 20px;
       border: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      font-size: 16px;
       cursor: pointer;
     }
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
 <body>
-  <div id="controls">
-    <div id="captureBtn" class="circle-btn"></div>
-    <div id="clearBtn" class="clear-btn"></div>
-  </div>
+
+<div id="controls">
+  <button class="clear-btn" onclick="clearCanvas()">Clear</button>
+  <div class="button" onclick="capturePhoto()"></div>
+</div>
 
 <script>
-let cam;
-let cols, rows;
-let scl = 20;
-let inc = 0.05;
-let zoff = 0;
+let video;
+let sourceImg;
 let particles = [];
 let flowfield;
-let imgSnapshot;
-let photoMode = false;
+let cols, rows;
+let scl = 20;
+let inc = 0.1;
+let zoff = 0;
+let photoTaken = false;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  cam = createCapture({ video: { facingMode: { exact: "environment" } }, audio: false });
-  cam.size(width, height);
-  cam.hide();
+  pixelDensity(1);
+
+  video = createCapture({ video: { facingMode: "environment" } });
+  video.size(width, height);
+  video.hide();
 
   cols = floor(width / scl);
   rows = floor(height / scl);
   flowfield = new Array(cols * rows);
 
-  // fewer particles for less density
-  for (let i = 0; i < 1500; i++) {
+  // Increase particles for faster buildup
+  for (let i = 0; i < 2000; i++) {
     particles[i] = new Particle();
   }
 
   background(0);
-
-  document.getElementById('captureBtn').addEventListener('click', capturePhoto);
-  document.getElementById('clearBtn').addEventListener('click', () => {
-    background(0);
-    photoMode = false;
-  });
 }
 
 function draw() {
-  let yoff = 0;
-  for (let y = 0; y < rows; y++) {
-    let xoff = 0;
-    for (let x = 0; x < cols; x++) {
-      let angle = noise(xoff, yoff, zoff) * TWO_PI * 1.5; // calm turbulence
-      let v = p5.Vector.fromAngle(angle);
-      v.setMag(1);
-      flowfield[x + y * cols] = v;
-      xoff += inc;
+  if (photoTaken && sourceImg) {
+    let yoff = 0;
+    for (let y = 0; y < rows; y++) {
+      let xoff = 0;
+      for (let x = 0; x < cols; x++) {
+        let index = x + y * cols;
+        let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+        let v = p5.Vector.fromAngle(angle);
+        v.setMag(1);
+        flowfield[index] = v;
+        xoff += inc;
+      }
+      yoff += inc;
     }
-    yoff += inc;
-  }
-  zoff += 0.001;
+    zoff += 0.002;
 
-  if (!photoMode) {
-    cam.loadPixels();
-  } else if (imgSnapshot) {
-    imgSnapshot.loadPixels();
-  }
-
-  for (let p of particles) {
-    p.follow(flowfield);
-    p.update();
-    if (!photoMode) {
-      p.show(cam);
-    } else {
-      p.show(imgSnapshot);
+    sourceImg.loadPixels();
+    for (let i = 0; i < particles.length; i++) {
+      particles[i].follow(flowfield);
+      particles[i].update();
+      particles[i].show(sourceImg);
     }
-    p.edges();
   }
 }
 
 function capturePhoto() {
-  imgSnapshot = cam.get();
-  photoMode = true;
+  sourceImg = video.get();
+  photoTaken = true;
 }
 
-// PARTICLE CLASS
+function clearCanvas() {
+  background(0);
+}
+
 class Particle {
   constructor() {
     this.pos = createVector(random(width), random(height));
-    this.prevPos = this.pos.copy();
     this.vel = createVector(0, 0);
     this.acc = createVector(0, 0);
     this.maxspeed = 2;
   }
+
   follow(vectors) {
     let x = floor(this.pos.x / scl);
     let y = floor(this.pos.y / scl);
@@ -138,44 +123,47 @@ class Particle {
     let force = vectors[index];
     this.applyForce(force);
   }
+
   applyForce(force) {
     this.acc.add(force);
   }
+
   update() {
     this.vel.add(this.acc);
     this.vel.limit(this.maxspeed);
     this.pos.add(this.vel);
     this.acc.mult(0);
+
+    if (this.pos.x > width) this.pos.x = 0;
+    if (this.pos.x < 0) this.pos.x = width;
+    if (this.pos.y > height) this.pos.y = 0;
+    if (this.pos.y < 0) this.pos.y = height;
   }
+
   show(sourceImg) {
-    let cx = floor(map(this.prevPos.x, 0, width, 0, sourceImg.width));
-    let cy = floor(map(this.prevPos.y, 0, height, 0, sourceImg.height));
+    let px = this.pos.x + random(-2, 2);
+    let py = this.pos.y + random(-2, 2);
+
+    let cx = floor(map(px, 0, width, 0, sourceImg.width));
+    let cy = floor(map(py, 0, height, 0, sourceImg.height));
     let i = (cy * sourceImg.width + cx) * 4;
+
     if (i >= 0 && i < sourceImg.pixels.length) {
       let r = sourceImg.pixels[i];
       let g = sourceImg.pixels[i + 1];
       let b = sourceImg.pixels[i + 2];
       noStroke();
-      fill(r, g, b, 200);
-      
-      // short dash-like strokes
+      fill(r, g, b, 230);
+
       push();
-      translate(this.prevPos.x, this.prevPos.y);
-      rotate(this.vel.heading() + random(-0.2, 0.2));
+      translate(px, py);
+      rotate(this.vel.heading() + random(-0.4, 0.4));
       rectMode(CENTER);
-      let len = 6; // short length
-      let wid = 3; // thickness
+      let len = random(2, 4); // short strokes
+      let wid = random(1.5, 3.5); // thicker strokes
       rect(0, 0, len, wid);
       pop();
     }
-    this.prevPos = this.pos.copy();
-  }
-  edges() {
-    if (this.pos.x > width) this.pos.x = 0;
-    if (this.pos.x < 0) this.pos.x = width;
-    if (this.pos.y > height) this.pos.y = 0;
-    if (this.pos.y < 0) this.pos.y = height;
-    this.prevPos = this.pos.copy();
   }
 }
 </script>
