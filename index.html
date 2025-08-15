@@ -12,9 +12,11 @@
       bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
+      display: flex;
+      gap: 20px;
       z-index: 10;
     }
-    .shutter-btn {
+    .btn {
       width: 70px;
       height: 70px;
       border-radius: 50%;
@@ -22,24 +24,31 @@
       background: rgba(255,255,255,0.1);
       cursor: pointer;
     }
+    .btn.small {
+      width: 50px;
+      height: 50px;
+      border: 3px solid white;
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
 <body>
   <div class="controls">
-    <div id="captureBtn" class="shutter-btn"></div>
+    <div id="captureBtn" class="btn"></div>
+    <div id="clearBtn" class="btn small"></div>
   </div>
 <script>
 let cam;
 let cols, rows;
-let scl = 10; // cell size
+let scl = 10; // grid size
 let flowfield;
 let particles = [];
 let img;
 let running = false;
 let zoff = 0;
 let inc = 0.1; // noise increment
-let mag = 1;   // vector magnitude
+let mag = 0.5; // smaller magnitude for calmer flow
+let maxLineLen = 4; // short strokes
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -51,7 +60,6 @@ function setup() {
   rows = floor(height / scl);
   flowfield = new Array(cols * rows);
 
-  // Particle count based on PDE defaults
   for (let i = 0; i < 2000; i++) {
     particles[i] = new Particle();
   }
@@ -59,6 +67,9 @@ function setup() {
   background(0);
 
   document.getElementById('captureBtn').addEventListener('click', capturePhoto);
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    if (running) background(0);
+  });
 }
 
 function camReady() {
@@ -87,7 +98,7 @@ function draw() {
     let xoff = 0;
     for (let x = 0; x < cols; x++) {
       let index = x + y * cols;
-      let angle = noise(xoff, yoff, zoff) * TWO_PI * 4; // PDE-like turbulence
+      let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
       let v = p5.Vector.fromAngle(angle);
       v.setMag(mag);
       flowfield[index] = v;
@@ -95,7 +106,7 @@ function draw() {
     }
     yoff += inc;
   }
-  zoff += 0.002; // slow field change
+  zoff += 0.002;
 
   for (let p of particles) {
     p.follow(flowfield);
@@ -105,14 +116,12 @@ function draw() {
   }
 }
 
-// Particle class port from PDE
 class Particle {
   constructor() {
     this.pos = createVector(random(width), random(height));
     this.vel = createVector(0, 0);
     this.acc = createVector(0, 0);
-    this.maxspeed = 2;
-    this.prevPos = this.pos.copy();
+    this.maxspeed = 1.5;
   }
 
   follow(vectors) {
@@ -135,25 +144,25 @@ class Particle {
   }
 
   show(sourceImg) {
-    let cx = floor(map(this.prevPos.x, 0, width, 0, sourceImg.width));
-    let cy = floor(map(this.prevPos.y, 0, height, 0, sourceImg.height));
+    let cx = floor(map(this.pos.x, 0, width, 0, sourceImg.width));
+    let cy = floor(map(this.pos.y, 0, height, 0, sourceImg.height));
     let i = (cy * sourceImg.width + cx) * 4;
     if (i >= 0 && i < sourceImg.pixels.length) {
       let r = sourceImg.pixels[i];
       let g = sourceImg.pixels[i + 1];
       let b = sourceImg.pixels[i + 2];
-      stroke(r, g, b, 150);
-      strokeWeight(1.5);
-      line(this.prevPos.x, this.prevPos.y, this.pos.x, this.pos.y);
-      this.prevPos = this.pos.copy();
+      stroke(r, g, b, 180);
+      strokeWeight(2.0);
+      let dir = this.vel.copy().setMag(maxLineLen);
+      line(this.pos.x, this.pos.y, this.pos.x + dir.x, this.pos.y + dir.y);
     }
   }
 
   edges() {
-    if (this.pos.x > width) { this.pos.x = 0; this.prevPos = this.pos.copy(); }
-    if (this.pos.x < 0) { this.pos.x = width; this.prevPos = this.pos.copy(); }
-    if (this.pos.y > height) { this.pos.y = 0; this.prevPos = this.pos.copy(); }
-    if (this.pos.y < 0) { this.pos.y = height; this.prevPos = this.pos.copy(); }
+    if (this.pos.x > width) { this.pos.x = 0; }
+    if (this.pos.x < 0) { this.pos.x = width; }
+    if (this.pos.y > height) { this.pos.y = 0; }
+    if (this.pos.y < 0) { this.pos.y = height; }
   }
 }
 </script>
